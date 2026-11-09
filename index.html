@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Rail gantry crane · 25 t RMG — Machine Skill × Anatomy</title>
-<meta name="description" content="A 25 t rail-mounted gantry container crane (DINSON, ZPMC spreader), modelled from site photographs: pin-jointed bogies, cable reel, machinery house, and a live duty-cycle solver with trapezoidal motion profiles and spreader sway. Machine Skill physics runtime with Anatomy parts-list and geometry-audit discipline.">
+<meta name="description" content="A 25 t rail-mounted gantry container crane (DINSON, ZPMC spreader), modelled from site photographs: pin-jointed bogies, two 90-degree cable reels, three access ladders, a visible lifting container, machinery house, and a live duty-cycle solver with trapezoidal motion profiles and spreader sway. Machine Skill physics runtime with Anatomy parts-list and geometry-audit discipline.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -594,10 +594,20 @@ html,body { margin:0; height:100%; background:var(--paper); color:var(--ink); fo
 .lab-night .lab-how .eq { color:#bdbab2 }
 .lab-scale { position:absolute; left:4.2vw; bottom:calc(4.2vh + 3.4em); font-size:clamp(10px,0.8vw,14px); color:var(--mute); font-variant-numeric:tabular-nums }
 .lab-scale div { height:1px; background:var(--mute); margin-top:0.35em; position:relative } .lab-scale div::before,.lab-scale div::after { content:''; position:absolute; top:-3px; width:1px; height:7px; background:var(--mute) } .lab-scale div::after { right:0 }
-.lab-labels { position:absolute; inset:0 } .lab-labels svg { position:absolute; inset:0; width:100%; height:100% }
-.lab-lab { position:absolute; font-size:clamp(11px,0.86vw,16px); color:var(--ink); white-space:nowrap; transform:translate(0,-50%); transition:opacity .35s; line-height:1.25; text-shadow:0 0 3px var(--paper), 0 0 8px var(--paper), 0 0 14px var(--paper) }
+.lab-labels { position:absolute; inset:0; pointer-events:none } .lab-labels svg { position:absolute; inset:0; width:100%; height:100%; pointer-events:none }
+.lab-lab { position:absolute; font-size:clamp(11px,0.86vw,16px); color:var(--ink); white-space:nowrap; transform:translate(0,-50%); transition:opacity .35s; line-height:1.25; text-shadow:0 0 3px var(--paper), 0 0 8px var(--paper), 0 0 14px var(--paper); pointer-events:none }
 .lab-lab small { display:block; color:var(--mute); font-size:0.86em; font-variant-numeric:tabular-nums }
 .lab-lab.left { transform:translate(-100%,-50%); text-align:right }
+/* One annotation is one hover target: label text, leader line and anchor dot. */
+.lab-labels.labels-on .lab-lab { pointer-events:auto; cursor:pointer }
+.lab-labels svg .lab-hit { fill:transparent; stroke:none; pointer-events:none }
+.lab-labels svg .lab-lead, .lab-labels svg .lab-anchor { pointer-events:none }
+.lab-labels.labels-on svg .lab-hit, .lab-labels.labels-on svg .lab-anchor { pointer-events:all; cursor:pointer }
+.lab-labels.labels-on svg .lab-lead { pointer-events:stroke; cursor:pointer }
+.lab-lab:hover, .lab-lab.hot, .lab-lab:focus-visible { color:var(--accent) !important; outline:none; text-shadow:0 0 3px var(--paper), 0 0 8px var(--paper), 0 0 14px var(--paper) }
+.lab-lab:hover small, .lab-lab.hot small, .lab-lab:focus-visible small { color:var(--accent) !important; opacity:.78 }
+.lab-labels svg .lab-lead.hot { stroke:#e4572e; stroke-width:1.8 }
+.lab-labels svg .lab-anchor.hot { fill:#e4572e }
 .lab-beat { position:absolute; left:4.2vw; bottom:4.6vh; display:flex; align-items:center; gap:0.85em; font-size:clamp(16px,1.9vw,36px); letter-spacing:-0.01em; opacity:0; transition:none }
 .lab-beat .n { font-size:0.5em; border:1px solid var(--faint); color:var(--mute); padding:0.42em 0.62em; line-height:1; font-variant-numeric:tabular-nums }
 .lab-beat b { font-weight:500 } .lab-beat span { color:var(--mute) }
@@ -726,6 +736,30 @@ export class Lab {
     if (o.frame === 'center') this.$('.lab-side').style.display = 'none'
     // the primary metric block
     this.metricEl = this.$('.lab-metric')
+    // Hovering a pinned label, its leader line or its anchor dot highlights
+    // that whole annotation in the same orange accent used by the demo.
+    this._hotLabel = -1
+    const setHot = (i) => {
+      if (this._hotLabel === i) return
+      this._hotLabel = i
+      for (let j = 0; j < this.labels.length; j++) this.labels[j].el.classList.toggle('hot', j === i)
+      // Repaint the leader line and anchor dot now, not on the next animation
+      // frame: otherwise text turns orange before its geometry does.
+      if (this.camera && this.machine) this._updateLabels()
+    }
+    const hotFromEvent = (e) => {
+      const t = e.target
+      const lab = t?.closest?.('.lab-lab')
+      const raw = lab ? lab.dataset.li : (t?.dataset?.li ?? -1)
+      const i = Number(raw)
+      setHot(Number.isInteger(i) && i >= 0 ? i : -1)
+    }
+    addEventListener('pointermove', hotFromEvent, { passive: true, capture: true })
+    addEventListener('pointerdown', hotFromEvent, { passive: true, capture: true })
+    addEventListener('blur', () => setHot(-1))
+    ui.addEventListener('pointerleave', () => setHot(-1), { passive: true })
+    ui.addEventListener('focusin', (e) => { const lab = e.target?.closest?.('.lab-lab'); if (lab) setHot(Number(lab.dataset.li)) })
+    ui.addEventListener('focusout', () => setHot(-1))
   }
 
   /**
@@ -960,7 +994,7 @@ export class Lab {
 
   /** a pinned label with a leader line: lab.label(obj, 'HP turbine', { at:[x,y,z] in obj frame, value:()=>'1,712 K' }) */
   label(obj, text, o = {}) {
-    const el = document.createElement('div'); el.className = 'lab-lab'; el.innerHTML = `${text}<small></small>`
+    const el = document.createElement('div'); el.className = 'lab-lab'; el.dataset.li = String(this.labels.length); el.tabIndex = 0; el.innerHTML = `${text}<small></small>`
     this.$('.lab-labels').appendChild(el)
     const L = { obj, at: new THREE.Vector3(...(o.at ?? [0, 0, 0])), el, small: el.querySelector('small'), value: o.value, side: o.side }
     this.labels.push(L)
@@ -1071,21 +1105,25 @@ export class Lab {
     const on = this.state.labels
     const W = innerWidth, H = innerHeight
     const svg = this.$('.lab-labels svg')
+    const layer = this.$('.lab-labels')
+    layer.classList.toggle('labels-on', on > 0.01)
     let lines = ''
     const ctr = new THREE.Vector3().setFromMatrixPosition(this.machine.matrixWorld).project(this.camera)
     const items = []
-    for (const L of this.labels) {
+    for (let li = 0; li < this.labels.length; li++) {
+      const L = this.labels[li]
       const p = L.at.clone(); L.obj.updateWorldMatrix(true, false); p.applyMatrix4(L.obj.matrixWorld)
       const s = p.project(this.camera)
       const vis = on > 0.01 && s.z < 1 && L.obj.visible !== false
       if (!vis) { L.el.style.opacity = '0'; continue }
       const x = (s.x * 0.5 + 0.5) * W, y = (-s.y * 0.5 + 0.5) * H
       const side = L.side ?? (s.x < ctr.x ? 'left' : 'right')
-      items.push({ L, x, y, side })
+      items.push({ L, li, x, y, side })
     }
     // spread labels vertically per side so they never overlap
     for (const side of ['left', 'right']) {
       const list = items.filter((i) => i.side === side).sort((a, b) => a.y - b.y)
+      if (!list.length) continue
       const gap = Math.max(34, H * 0.045)
       let last = -1e9
       for (const it of list) { it.ly = Math.max(it.y, last + gap); last = it.ly }
@@ -1093,12 +1131,17 @@ export class Lab {
       for (const it of list) it.lx = clamp(xs, W * 0.05, W * 0.7)
     }
     for (const it of items) {
-      const { L, x, y, lx, ly, side } = it
-      L.el.className = 'lab-lab' + (side === 'left' ? ' left' : '')
+      const { L, li, x, y, lx, ly, side } = it
+      const hot = li === this._hotLabel
+      L.el.classList.toggle('left', side === 'left')
+      L.el.classList.toggle('hot', hot)
       L.el.style.left = `${lx + (side === 'left' ? -8 : 8)}px`; L.el.style.top = `${ly}px`; L.el.style.opacity = String(on)
       if (L.value) L.small.textContent = L.value()
       const ink = this.theme === 'paper' ? '20,20,20' : '240,238,232'
-      lines += `<path d="M${x.toFixed(1)},${y.toFixed(1)} L${(lx + (side === 'left' ? 12 : -12)).toFixed(1)},${ly.toFixed(1)} L${lx.toFixed(1)},${ly.toFixed(1)}" stroke="rgba(${ink},${(0.55 * on).toFixed(3)})" stroke-width="1" fill="none"/><circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="3" fill="rgba(${ink},${on.toFixed(3)})" stroke="${this.theme === 'paper' ? '#fff' : '#000'}" stroke-width="1.2"/>`
+      const stroke = hot ? `rgba(228,87,46,${(0.95 * on).toFixed(3)})` : `rgba(${ink},${(0.55 * on).toFixed(3)})`
+      const fill = hot ? `rgba(228,87,46,${on.toFixed(3)})` : `rgba(${ink},${on.toFixed(3)})`
+      const lead = `M${x.toFixed(1)},${y.toFixed(1)} L${(lx + (side === 'left' ? 12 : -12)).toFixed(1)},${ly.toFixed(1)} L${lx.toFixed(1)},${ly.toFixed(1)}`
+      lines += `<circle class="lab-hit" data-li="${li}" cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="9"/><path class="lab-lead${hot ? ' hot' : ''}" data-li="${li}" d="${lead}" stroke="${stroke}" stroke-width="${hot ? 1.8 : 1}" fill="none"/><circle class="lab-anchor${hot ? ' hot' : ''}" data-li="${li}" cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${hot ? 4.4 : 3}" fill="${fill}" stroke="${this.theme === 'paper' ? '#fff' : '#000'}" stroke-width="1.2"/>`
     }
     svg.innerHTML = lines
   }
@@ -1583,8 +1626,8 @@ window.__PART_IDS = ["leg-ws-back","lug-ws-back-a","lug-ws-back-b","lug-ws-back-
 // reaching X -23 over the ship. Each side stands on TWO columns (Z -2.6/+2.6)
 // joined by two horizontal tubular ties and a diagonal; each column foot is
 // PIN-JOINTED to its bogie so the portal can flex. Four bogies, two grey travel
-// motors each, ride the rails; a yellow cable reel on the waterside-back bogie
-// platform pays out the power cable as the crane travels. The trolley runs
+// motors each, ride the rails; two 90-degree cable reels on the waterside
+// bogies pay out the power cable as the crane travels. The trolley runs
 // under the girder/boom; four wire-rope falls carry the ZPMC headblock and
 // telescopic spreader. Duty: pick a 20 ft box from the ship hold slot, hoist,
 // traverse to the yard lane, lower onto the lane, release, return — with a
@@ -1604,8 +1647,10 @@ const lab = new Lab({
 // ------------------------------------------------------------------ solver state (declared early: part labels read it)
 // lastCycle/movesH initials MEASURED 2026-11-07 (crane/measure-cycle.mjs):
 // the shorter lane drop (stacks removed) gives 124.2 s -> 29.0 moves/h.
-const S = { phase: 'pick lower', tPhase: 0, cycleT: 0, lastCycle: 126, movesH: 28.5, load: 22, attached: false,
-  trolleyX: -14, spreaderY: 10.2, gantryZ: 0, hoistV: 0, trolleyV: 0, gantryV: 0, sway: 0, swayV: 0,
+// Start with the 20 ft box already locked on at the waterside pick height: the
+// first thing the user sees is a real hoist, not an empty spreader.
+const S = { phase: 'hoist', tPhase: 0, cycleT: 0, lastCycle: 126, movesH: 28.5, load: 22, attached: true,
+  trolleyX: -15, spreaderY: 10.35, gantryZ: 0, hoistV: 0, trolleyV: 0, gantryV: 0, sway: 0, swayV: 0,
   power: 0, tension: 0, ropeLen: 12.3, broken: false, slack: 0 }
 window.__S = S
 
@@ -1684,23 +1729,30 @@ function openTop(g, mat, darkMat, cy) {
   box(g, mat, 0.14, 0.16, 2.52, 3.0, cy + 1.32, 0, 0.01); box(g, mat, 0.14, 0.16, 2.52, -3.0, cy + 1.32, 0, 0.01)
   box(g, darkMat, 5.7, 0.08, 2.1, 0, cy + 1.18, 0, 0.01)
 }
+/** one 20 ft open-top box, centred at local y = cy; used both under the
+ *  spreader and as the released container left on the yard lane. */
+function containerBody(g, mat, darkMat, cy) {
+  box(g, mat, 6.06, 2.6, 2.44, 0, cy, 0, 0.03)
+  openTop(g, mat, darkMat, cy - 0.02)
+  for (const n of [-2.2, -0.72, 0.72, 2.2]) for (const z of [1.24, -1.24]) box(g, mat, 0.14, 2.45, 0.05, n, cy, z, 0.005)
+}
 
 // ==================================================================
 // REBUILT from the site reference photograph (Crane/crane.jpg), 2026-11-07.
 // A SINGLE clean crane in the studio: dark teal BOX-SECTION portal, long
 // waterside boom with a triangular open truss, A-frame apex mast with flat
 // stay straps, plain white machinery house, tapered red leg cabinets,
-// black/yellow spoked cable reels, yellow bogies, zig-zag open-tread
-// stairs, caged ladders and two quay rails. No ship, no warehouse, no
-// second crane: those filled the frame and put the camera inside the model.
+// TWO black/yellow cable reels turned 90 degrees to the spreader, yellow
+// bogies, THREE access ladders and two quay rails. No ship, no warehouse,
+// no second crane: those filled the frame and put the camera inside the model.
 // Every coordinate stays in the ORIGINAL machine frame (X: -27 boom tip ..
 // +18 landside, Y: 0 .. 33, Z: +/-3), so the solver / demo below is untouched.
 // ==================================================================
 
 // --- reference colours -------------------------------------------------
 /* Softer clearcoat kills the white specular streak that used to cut across
-   the portal ties; dark galvanised paint makes the open-tread stairs read as
-   stairs instead of a blown-out white ribbon. */
+   the portal ties; dark galvanised paint keeps the three access ladders
+   readable instead of a blown-out white ribbon. */
 const frameM   = MAT.paint({ color: [0.10, 0.235, 0.245], roughness: 0.60, clearcoat: 0.10, clearcoatRoughness: 0.45 })
 const frameHiM = MAT.paint({ color: [0.145, 0.30, 0.315], roughness: 0.58, clearcoat: 0.12, clearcoatRoughness: 0.42 })
 const frameCut = MAT.paint({ color: [0.10, 0.235, 0.245], roughness: 0.60, clearcoat: 0.10, clearcoatRoughness: 0.45, cap: [0.85, 0.23, 0.13] })
@@ -1722,30 +1774,19 @@ function stat(geo, mat, x, y, z, name) {
   const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z)
   m.castShadow = false; m.receiveShadow = true; m.name = name || ''; staticG.add(m); return m
 }
-/** open-tread stair flight with two stringers, handrails and posts */
-function stairFlight(g, a, b, n, w) {
-  const dx = b[0] - a[0], dy = b[1] - a[1], dz = b[2] - a[2]
-  for (const s of [-1, 1]) {
-    beam(g, treadM, [a[0], a[1], a[2] + s * w / 2], [b[0], b[1], b[2] + s * w / 2], 0.13, 0.09)
-    beam(g, treadM, [a[0], a[1] + 1.0, a[2] + s * w / 2], [b[0], b[1] + 1.0, b[2] + s * w / 2], 0.055, 0.055)
-    for (let k = 0; k <= 4; k++) {
-      const t = k / 4
-      box(g, treadM, 0.05, 1.0, 0.05, a[0] + dx * t, a[1] + dy * t + 0.5, a[2] + s * w / 2 + dz * t, 0.004)
-    }
-  }
-  for (let k = 1; k <= n; k++) {
-    const t = k / (n + 1)
-    box(g, treadM, 0.60, 0.055, w, a[0] + dx * t, a[1] + dy * t, a[2] + dz * t, 0.004)
-  }
-  box(g, treadM, 1.25, 0.09, w + 0.2, b[0], b[1], b[2], 0.005)
-}
+/** straight steel ladder; the scene deliberately uses exactly three of these */
 function ladder(g, x, y0, y1, z) {
-  for (const s of [-1, 1]) box(g, treadM, 0.055, y1 - y0, 0.055, x + s * 0.27, (y0 + y1) / 2, z, 0.004)
-  for (let y = y0 + 0.3; y < y1; y += 0.34) box(g, treadM, 0.54, 0.04, 0.045, x, y, z, 0.004)
+  const grp = new THREE.Group(); grp.name = 'ladder'; grp.userData.kind = 'ladder'; g.add(grp)
+  for (const s of [-1, 1]) box(grp, treadM, 0.055, y1 - y0, 0.055, x + s * 0.27, (y0 + y1) / 2, z, 0.004)
+  for (let y = y0 + 0.3; y < y1; y += 0.34) box(grp, treadM, 0.54, 0.04, 0.045, x, y, z, 0.004)
 }
-/** black/yellow spoked cable reel, axis along Z so it faces the camera */
+/** Two black/yellow spoked cable reels on the waterside legs. The mount turns
+ *  the disc 90 degrees about Y, so its axle runs along X (parallel to the
+ *  spreader) instead of along Z. The returned inner group still spins about
+ *  local Z; the mount maps that to the world X axle as the crane travels. */
 function makeReel(g, cx, cy, cz, R = 1.35) {
-  const rg = new THREE.Group(); rg.position.set(cx, cy, cz); g.add(rg)
+  const mount = new THREE.Group(); mount.position.set(cx, cy, cz); mount.rotation.y = Math.PI / 2; g.add(mount)
+  const rg = new THREE.Group(); mount.add(rg)
   const rim = new THREE.Mesh(new THREE.TorusGeometry(R, 0.14, 8, 36), blackM); rim.castShadow = true; rg.add(rim)
   const coil = new THREE.Mesh(new THREE.TorusGeometry(R - 0.28, 0.22, 8, 36), cableM); coil.castShadow = true; rg.add(coil)
   const hub = new THREE.Mesh(new THREE.CylinderGeometry(0.34, 0.34, 0.46, 20).rotateX(Math.PI / 2), yellowM); hub.castShadow = true; rg.add(hub)
@@ -1761,8 +1802,10 @@ function makeReel(g, cx, cy, cz, R = 1.35) {
     t.position.set(Math.cos(a) * (R + 0.06), Math.sin(a) * (R + 0.06), 0)
     t.rotation.z = a - Math.PI / 2; t.castShadow = true; rg.add(t)
   }
-  box(g, frameM, 0.26, 2.3, 0.26, cx, cy - 1.75, cz - 0.4, 0.02)
-  box(g, frameM, 1.2, 0.22, 0.26, cx - Math.sign(cx) * 0.6, cy - 0.55, cz - 0.4, 0.02)
+  // A-frame cradle stays in world space so it never rotates with the drum.
+  box(g, frameM, 2.6, 0.22, 0.26, cx, cy - 1.75, cz - 0.4, 0.02)
+  box(g, frameM, 0.26, 2.3, 0.26, cx - 0.9, cy - 2.9, cz - 0.4, 0.02)
+  box(g, frameM, 0.26, 2.3, 0.26, cx + 0.9, cy - 2.9, cz - 0.4, 0.02)
   return rg
 }
 
@@ -1771,7 +1814,7 @@ const G = {
   legs:   grp('legs', 'crane', [0, 0, 0], { name: 'Portal legs', label: 'Portal legs', at: [-9, 13, 0.8], value: () => '4 x tapered box columns' }),
   portal: grp('portal', 'crane', [0, 0, 0], { name: 'Portal ties and face beams', label: 'Portal frame', at: [-9, 16.2, 2.9], value: () => 'box ties at 8 m / 16 m' }),
   bogies: grp('bogies', 'crane', [0, 0, 0], { name: 'Bogies, cabinets and reels', label: 'Bogies', at: [-9, 1.1, 3.0], value: () => '4 x rail bogies' }),
-  stairs: grp('stairs', 'crane', [0, 0, 0], { name: 'Access stairs and ladders' }),
+  stairs: grp('stairs', 'crane', [0, 0, 0], { name: 'Three access ladders' }),
   girder: grp('girder', 'crane', [0, 0, 0], { name: 'Main girder and backreach', label: 'Main girder', at: [4, 26.4, 1.1], value: () => 'box girder + triangular web' }),
   boom:   grp('boom', 'crane', [0, 0, 0], { name: 'Waterside lattice boom', label: 'Waterside boom', at: [-20, 26.1, 1.1], value: () => '18 m cantilever' }),
   apex:   grp('apex', 'crane', [0, 0, 0], { name: 'A-frame apex and stay straps', label: 'A-frame apex', at: [-7.2, 33.4, 0.5], value: () => 'forestays + backstays' }),
@@ -1839,29 +1882,32 @@ for (const X of [-9, 9]) for (const Z of [-2.6, 2.6]) {
   box(G.bogies, darkSteel, 1.35, 0.1, 1.35, cx, 11.86, cz, 0.02)
   box(G.bogies, darkInM, 0.06, 1.2, 0.06, cx, 10.6, cz + 0.86, 0.004)
 }
-// black/yellow spoked cable reels; one of them spins with gantry travel
-let reelGroup = null
-for (const X of [-9, 9]) for (const Z of [-2.6, 2.6]) {
+// Only the TWO waterside reels remain: both are perpendicular to the
+// spreader and both pay out together as the crane travels along the rails.
+const reelGroups = []
+for (const Z of [-2.6, 2.6]) {
+  const X = -9
   const rx = X + Math.sign(X) * 1.15, rz = Z + Math.sign(Z) * 0.8
-  const r = makeReel(G.bogies, rx, 6.15, rz)
-  if (X > 0 && Z > 0) reelGroup = r
+  reelGroups.push(makeReel(G.bogies, rx, 6.15, rz))
 }
-if (!reelGroup) reelGroup = new THREE.Group()
 
-// --- zig-zag open-tread stairs on both front legs + caged ladders -------
-for (const X of [-9, 9]) {
-  const z = 3.35, w = 0.95
-  stairFlight(G.stairs, [X - 3.1, 15.7, z], [X - 0.2, 11.2, z], 7, w)
-  stairFlight(G.stairs, [X - 0.2, 11.2, z], [X - 3.1, 6.7, z], 7, w)
-  stairFlight(G.stairs, [X - 3.1, 6.7, z], [X - 0.2, 2.2, z], 7, w)
-  stairFlight(G.stairs, [X - 0.2, 2.2, z], [X - 2.6, 0.35, z], 3, w)
-  box(G.stairs, treadM, 1.5, 0.09, 1.2, X - 0.2, 11.2, z, 0.005)
-  box(G.stairs, treadM, 1.5, 0.09, 1.2, X - 0.2, 6.7, z, 0.005)
-  box(G.stairs, treadM, 1.5, 0.09, 1.2, X - 0.2, 2.2, z, 0.005)
-  ladder(G.stairs, X + 0.78, 2.2, 22.3, 3.05)
-  for (let y = 3.0; y < 22; y += 2.4) {
+// --- exactly three ladders: two one-level reel-service ladders and one
+//     landside ladder up to the control-room / girder level.
+for (const Z of [-2.6, 2.6]) {
+  const X = -9
+  const rz = Z + Math.sign(Z) * 0.8
+  const lx = X + Math.sign(X) * 1.9, lz = rz + Math.sign(Z) * 1.45
+  ladder(G.stairs, lx, 0.35, 5.05, lz)
+  box(G.stairs, treadM, 1.15, 0.09, 1.25, lx, 5.05, lz, 0.005)
+  for (const sx of [-0.48, 0.48]) box(G.stairs, treadM, 0.05, 0.9, 0.05, lx + sx, 5.5, lz + 0.55, 0.004)
+}
+{
+  const X = 9, z = 3.05
+  ladder(G.stairs, X + 0.78, 0.35, 22.3, z)
+  box(G.stairs, treadM, 1.5, 0.09, 1.2, X + 0.78, 22.3, z, 0.005)
+  for (let y = 1.2; y < 22; y += 2.4) {
     const hoop = new THREE.Mesh(new THREE.TorusGeometry(0.46, 0.025, 6, 14), treadM)
-    hoop.position.set(X + 0.78, y, 3.05); hoop.rotation.x = Math.PI / 2; G.stairs.add(hoop)
+    hoop.position.set(X + 0.78, y, z); hoop.rotation.x = Math.PI / 2; G.stairs.add(hoop)
   }
 }
 
@@ -2004,9 +2050,7 @@ const loadGroup = new THREE.Group(); swingGroup.add(loadGroup)
 {
   const cg = grp('container', 'head', [0, 0, 0], { name: '20 ft open-top container', label: '20 ft box', at: [0, -2.7, 1.25], value: () => `${fmt(S.load)} t gross` })
   cg.removeFromParent(); loadGroup.add(cg)
-  box(loadGroup, contGreyM, 6.06, 2.6, 2.44, 0, -2.7, 0, 0.03)
-  openTop(loadGroup, contGreyM, darkInM, -2.72) // rim at the box mouth (y -1.4)
-  for (const n of [-2.2, -0.72, 0.72, 2.2]) for (const z of [1.24, -1.24]) box(loadGroup, contGreyM, 0.14, 2.45, 0.05, n, -2.7, z, 0.005)
+  containerBody(loadGroup, contGreyM, darkInM, -2.7) // box mouth meets the spreader
 }
 
 // ------------------------------------------------------------------ duty cycle solver
@@ -2018,6 +2062,12 @@ const deckY = 10.35   // spreader centre when landed on the ship slot (container
 const laneY = 4.02    // spreader centre when the box lands on the bare lane (stacks removed 2026-11-07)
 const clearY = 17.5   // safe traverse height for the spreader centre
 const shipX = -15, laneX = 5 // v2.5 gauge: pick over the ship's quay-side cell, lane inside the 30 m portal
+// A released box stays visible on the yard lane; the hanging load and this
+// static box swap at pick-up / set-down, so the lifting demo always reads.
+const yardBox = new THREE.Group(); yardBox.name = 'Released 20 ft container on the yard lane'
+containerBody(yardBox, contPaleM, darkInM, 0)
+yardBox.position.set(laneX, 1.32, 0)
+staticG.add(yardBox)
 function hoistRated() { return S.attached ? 0.55 * Math.min(1, 25 / S.load) : 0.9 * Math.min(1, 25 / Math.max(S.load, 8)) }
 function moveAxis(cur, vel, target, vmax, accel, dt) {
   const d = target - cur
@@ -2042,8 +2092,8 @@ const PHASES = [
   { name: 'gantry reposition', run(dt) { const target = S.gantryTarget ?? 3; const [z, v, done] = moveAxis(S.gantryZ, S.gantryV, target, 0.75, GANTRY_A, dt); S.gantryZ = z; S.gantryV = v; if (done) { S.gantryTarget = target > 0 ? -3 : 3; return true } } },
   { name: 'dwell', dur: 1.2, run() { S.hoistV = 0; S.trolleyV = 0; return S.tPhase > 1.2 } },
 ]
-let phaseIdx = 0
-S.phase = PHASES[0].name
+let phaseIdx = 1 // open on the loaded hoist, so the container is lifting at boot
+S.phase = PHASES[phaseIdx].name
 
 lab.hero({ label: 'Moves per hour', unit: '/h', max: 40, digits: 1 })
 const loadSlider = lab.slider({ id: 'load', label: 'Load', min: 5, max: 30, value: 22, unit: 't', ends: ['Light', 'Over SWL'] })
@@ -2086,8 +2136,9 @@ lab.onTick((dt) => {
     r.position.set(rx, -drop / 2 - 0.02, rz); r.scale.y = S.broken ? drop * 0.985 : drop
     r.rotation.z = S.broken ? 0.012 * (i % 2 ? 1 : -1) : 0
   }
-  reelGroup.rotation.z = -S.gantryZ / 1.8 // reel axis runs along Z: spin about Z as the crane travels
+  for (const r of reelGroups) r.rotation.z = -S.gantryZ / 1.8 // local Z maps to the world X axle
   loadGroup.visible = S.attached
+  yardBox.visible = !S.attached
   const state = S.broken ? 'slack rope!' : S.load > 25 ? 'above SWL' : (S.phase === 'gantry reposition' ? 'positioning' : 'in cycle')
   lab.setHero(S.movesH, { state, bad: S.broken || S.load > 25, sub: `hoist ${fmt(22.53 - S.spreaderY - 1.35, 1)} m · trolley ${fmt(S.trolleyX, 1)} m · sway ${fmt(Math.abs(S.sway) * 57.3, 1)}° · rope ${fmt(S.tension)} kN/fall · hoist ${fmt(Math.max(0, S.power))} kW · cycle ${fmt(S.lastCycle)} s` })
 })
@@ -2103,7 +2154,7 @@ lab.breakIt({
 })
 
 lab.how(
-  'A 25-tonne rail-mounted gantry crane, rebuilt from the site reference photograph as a single clean studio model — box-section portal, A-frame apex with stay straps, white machinery house, cable reels and zig-zag access stairs — and driven by a duty-cycle solver rather than an animation loop. Each motion runs a trapezoidal velocity profile: accelerate at the drive limit (hoist 0.25 m/s², trolley 0.30, gantry 0.15), cruise, then brake so it stops exactly on target. Hoist speed is load-derated — v = v<sub>rated</sub>·min(1, 25/m) — so a box above the 25 t SWL still lifts, but slowly, and the state line warns. The cycle is a phase machine: lower onto the waterside pick position, lock on, hoist to clearance, traverse to the yard lane, lower onto the lane, release, hoist empty, traverse back, reposition the whole crane 3 m along the rails (watch the cable reel pay out), dwell — then repeat. Moves per hour is simply 3,600 divided by the measured cycle time. Hoist power is P = m·g·v/η with η = 0.85 while lifting (regenerative, ×0.8, while lowering); rope tension is the suspended weight shared over four falls. The spreader and load hang from the trolley as a pendulum of length L = rope length: θ″ = −(g/L)·θ − a<sub>trolley</sub>/L − 2ζ√(g/L)·θ′, so sway grows when the trolley accelerates with a long drop and settles slowly — exactly why real operators creep the last metres. The break makes the hoist pay out onto the load: tension collapses to zero, the ropes sag and the spreader tips — slack rope, the classic hoist fault. Simplified: one sway plane (along travel of the trolley), no wind, rope mass ignored, container treated as a point mass at the spreader.',
+  'A 25-tonne rail-mounted gantry crane, rebuilt from the site reference photograph as a single clean studio model — box-section portal, A-frame apex with stay straps, white machinery house, two 90-degree cable reels and three access ladders — and driven by a duty-cycle solver rather than an animation loop. A visible 20 ft box hangs from the spreader at start-up. Each motion runs a trapezoidal velocity profile: accelerate at the drive limit (hoist 0.25 m/s², trolley 0.30, gantry 0.15), cruise, then brake so it stops exactly on target. Hoist speed is load-derated — v = v<sub>rated</sub>·min(1, 25/m) — so a box above the 25 t SWL still lifts, but slowly, and the state line warns. The cycle is a phase machine: it starts with the 20 ft box already locked on at the waterside pick height, hoists to clearance, traverses to the yard lane, lowers and releases the box onto a visible lane container, hoists empty, traverses back, repositions the whole crane 3 m along the rails (watch both cable reels pay out), dwells, then lowers for the next pick and repeats. Moves per hour is simply 3,600 divided by the measured cycle time. Hoist power is P = m·g·v/η with η = 0.85 while lifting (regenerative, ×0.8, while lowering); rope tension is the suspended weight shared over four falls. The spreader and load hang from the trolley as a pendulum of length L = rope length: θ″ = −(g/L)·θ − a<sub>trolley</sub>/L − 2ζ√(g/L)·θ′, so sway grows when the trolley accelerates with a long drop and settles slowly — exactly why real operators creep the last metres. The break makes the hoist pay out onto the load: tension collapses to zero, the ropes sag and the spreader tips — slack rope, the classic hoist fault. Simplified: one sway plane (along travel of the trolley), no wind, rope mass ignored, container treated as a point mass at the spreader.',
   ['v(t): trapezoid, a ≤ a<sub>max</sub>, brake distance v²/2a', 'P = m·g·v / η,  η = 0.85', 'T<sub>fall</sub> = (m<sub>load</sub> + m<sub>spreader</sub>)·g / 4', 'θ″ = −(g/L)θ − a/L − 2ζ√(g/L)θ′', 'moves/h = 3600 / t<sub>cycle</sub>'],
 )
 
@@ -2129,9 +2180,9 @@ const DEMO = {
     { t: 52, az: -38, el: 18, dist: 1.95, target: [-3.5, 15.5, 0], fov: 34 },
   ],
   events: [
-    { t: 0.3, beat: ['01', 'A 25-tonne quayside gantry crane.', 'Rebuilt from the site photo — on rails, working the ship and the yard lane.'] },
+    { t: 0.3, beat: ['01', 'A 25-tonne quayside gantry crane.', 'Rebuilt from the site photo — a 20 ft box is already on the spreader.'] },
     { t: 6, beat: ['02', 'Four bogies carry the portal.', 'Each leg foot is pin-jointed, so the frame can flex as it travels.'] },
-    { t: 10.5, beat: ['03', 'The yellow cable reel feeds it power.', 'As the crane travels the rails, the reel winds the cable in and out.'] },
+    { t: 10.5, beat: ['03', 'Two waterside cable reels feed it power.', 'Turned 90 degrees to the spreader, both reels wind cable as the crane travels.'] },
     { t: 16.5, beat: ['04', 'Up top: trolley, ropes, spreader.', 'Four wire ropes carry the yellow ZPMC headblock and telescopic spreader.'] },
     { t: 22.5, beat: ['05', 'It lifts — and every number is live.', 'Hoist power and rope tension come straight from the load and the speed.'] },
     { t: 28, beat: ['06', 'A heavier box hoists slower.', 'The drive derates above rating — watch the cycle stretch.'], cursor: { to: 'slider:load:1', dur: 0.8 } },
@@ -2219,6 +2270,7 @@ function demoStop() {
   if (demoUI.bar) demoUI.bar.style.width = '0%'
 }
 window.__demo = { play: demoPlay, stop: demoStop, seek: (t) => { DP.jump = t }, get on() { return DP.on } }
+window.__craneParts = { reelGroups, loadGroup, yardBox, stairs: G.stairs, S }
 
 lab.start()
 
